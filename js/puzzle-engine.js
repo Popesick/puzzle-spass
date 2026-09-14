@@ -42,6 +42,19 @@ const PuzzleEngine = (() => {
     return { vEdge, hEdge };
   }
 
+  // Das Schnittmuster (welche Kante wo einen Zahn hat) haengt nur von rows/cols
+  // ab, nicht vom Bildinhalt. Wir erzeugen es pro Rasterformat genau einmal und
+  // verwenden es fuer alle Motive mit gleicher Teileanzahl wieder - wie eine
+  // echte Stanzform, die auf verschiedene Motive angewendet wird.
+  const edgePatternCache = new Map();
+  function getEdgePattern(rows, cols) {
+    const key = `${rows}x${cols}`;
+    if (!edgePatternCache.has(key)) {
+      edgePatternCache.set(key, generateEdges(rows, cols));
+    }
+    return edgePatternCache.get(key);
+  }
+
   // Zeichnet eine Kante mit optionalem Puzzle-"Zahn" (bezierbasierte Ausbuchtung).
   function drawEdge(ctx, x0, y0, x1, y1, tabDir, tabSize) {
     if (tabDir === 0) {
@@ -93,15 +106,20 @@ const PuzzleEngine = (() => {
     const boxW = cellW + margin * 2;
     const boxH = cellH + margin * 2;
 
-    const { vEdge, hEdge } = generateEdges(rows, cols);
+    const { vEdge, hEdge } = getEdgePattern(rows, cols);
     const pieces = [];
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
+        // Jede Kante wird von zwei Nachbarn aus jeweils entgegengesetzter
+        // Richtung nachgezeichnet. "bottom"/"right" nutzen den Kantenwert wie
+        // generiert (kanonische Richtung); "top"/"left" muessen ihn negieren,
+        // sonst woelben sich beide Nachbarn an derselben Kante nach innen und
+        // es entsteht eine sichtbare Luecke statt einer ineinandergreifenden Naht.
         const tabs = {
-          top: row === 0 ? 0 : hEdge[row][col],
+          top: row === 0 ? 0 : -hEdge[row][col],
           bottom: row === rows - 1 ? 0 : hEdge[row + 1][col],
-          left: col === 0 ? 0 : vEdge[row][col],
+          left: col === 0 ? 0 : -vEdge[row][col],
           right: col === cols - 1 ? 0 : vEdge[row][col + 1],
           tabSize,
         };
