@@ -111,6 +111,11 @@ img { -webkit-user-drag: none; user-select: none; }
   object-fit: cover;
   display: block;
 }
+/* Motiv komplett gemeistert (600 Teile geloest) -> abgedunkelt darstellen */
+.gallery-card img.solved-complete,
+.setup-preview-img.solved-complete {
+  filter: brightness(0.45) saturate(0.85);
+}
 .gallery-card-info { padding: 10px 12px 12px; }
 .gallery-card-title { font-weight: 600; font-size: 0.95rem; }
 .gallery-card-category {
@@ -207,7 +212,17 @@ img { -webkit-user-drag: none; user-select: none; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.puzzle-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .puzzle-progress { font-size: 0.78rem; color: var(--text-dim); }
+.puzzle-timer {
+  font-size: 0.78rem;
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
 
 .board-wrap {
   flex: 1 1 auto;
@@ -380,6 +395,30 @@ img { -webkit-user-drag: none; user-select: none; }
 .win-emoji { font-size: 3rem; }
 .win-card h2 { margin: 8px 0 4px; }
 .win-card p { color: var(--text-dim); margin: 0 0 8px; }
+.win-time {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text) !important;
+  font-variant-numeric: tabular-nums;
+}
+.win-trophies {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(111, 214, 255, 0.12);
+  text-align: left;
+}
+.win-trophy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.win-trophy-row .trophy-count { flex: 1 1 auto; color: var(--text-dim); }
+.win-trophy-row .trophy-time { font-weight: 600; }
+.win-trophy-row.is-current .trophy-time { color: var(--accent-2); }
 .win-actions {
   display: flex;
   gap: 10px;

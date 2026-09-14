@@ -15,6 +15,7 @@
     puzzleBackBtn: document.getElementById("puzzle-back-btn"),
     puzzleTitle: document.getElementById("puzzle-title"),
     puzzleProgress: document.getElementById("puzzle-progress"),
+    puzzleTimer: document.getElementById("puzzle-timer"),
     puzzlePreviewBtn: document.getElementById("puzzle-preview-btn"),
     zoomResetBtn: document.getElementById("puzzle-zoom-reset-btn"),
     boardWrap: document.getElementById("board-wrap"),
@@ -27,6 +28,8 @@
     loadingText: document.getElementById("loading-text"),
     winOverlay: document.getElementById("win-overlay"),
     winText: document.getElementById("win-text"),
+    winTime: document.getElementById("win-time"),
+    winTrophies: document.getElementById("win-trophies"),
     winReplayBtn: document.getElementById("win-replay-btn"),
     winGalleryBtn: document.getElementById("win-gallery-btn"),
     dragLayer: document.getElementById("drag-layer"),
@@ -36,6 +39,57 @@
   let selectedPieceCount = null;
   let game = null; // aktueller Puzzle-Zustand
   const MAX_ZOOM = 4;
+
+  // ---------- Bestzeiten (localStorage) ----------
+  const TIMES_KEY = "puzzleSpassBestTimes";
+
+  function loadTimes() {
+    try {
+      return JSON.parse(localStorage.getItem(TIMES_KEY)) || {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveTimes(times) {
+    try {
+      localStorage.setItem(TIMES_KEY, JSON.stringify(times));
+    } catch (err) {
+      // z.B. Privatmodus ohne Storage-Zugriff - Zeiten dann einfach nicht speichern
+    }
+  }
+
+  // Speichert die Zeit als neue Bestzeit, falls es keine gibt oder sie besser ist.
+  // Gibt zurueck, ob es eine neue Bestzeit ist.
+  function recordTime(imageId, pieceCount, ms) {
+    const times = loadTimes();
+    if (!times[imageId]) times[imageId] = {};
+    const prev = times[imageId][pieceCount];
+    const isNewBest = prev == null || ms < prev;
+    if (isNewBest) {
+      times[imageId][pieceCount] = ms;
+      saveTimes(times);
+    }
+    return isNewBest;
+  }
+
+  function isFullySolved(imageId) {
+    const times = loadTimes();
+    return !!(times[imageId] && times[imageId][600] != null);
+  }
+
+  function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function markSolvedThumb(imgEl, imageId) {
+    imgEl.classList.toggle("solved-complete", isFullySolved(imageId));
+  }
 
   function showView(view) {
     [els.viewGallery, els.viewSetup, els.viewPuzzle].forEach(v => v.classList.remove("view--active"));
@@ -56,6 +110,7 @@
         </div>`;
       card.addEventListener("click", () => openSetup(item));
       els.galleryGrid.appendChild(card);
+      markSolvedThumb(card.querySelector("img"), item.id);
     });
   }
 
@@ -65,6 +120,7 @@
     els.setupTitle.textContent = item.title;
     els.setupPreviewImg.src = item.full;
     els.setupPreviewImg.alt = item.title;
+    markSolvedThumb(els.setupPreviewImg, item.id);
     els.startPuzzleBtn.disabled = true;
 
     els.pieceCountOptions.innerHTML = "";
@@ -84,9 +140,13 @@
     showView(els.viewSetup);
   }
 
-  els.setupBackBtn.addEventListener("click", () => showView(els.viewGallery));
+  els.setupBackBtn.addEventListener("click", () => {
+    renderGallery();
+    showView(els.viewGallery);
+  });
   els.puzzleBackBtn.addEventListener("click", () => {
     teardownGame();
+    renderGallery();
     showView(els.viewGallery);
   });
 
@@ -170,8 +230,28 @@
     }
   }
 
+  // ---------- Timer ----------
+  function startTimer() {
+    game.startTime = Date.now();
+    updateTimerDisplay();
+    game.timerInterval = setInterval(updateTimerDisplay, 1000);
+  }
+
+  function stopTimer() {
+    if (game && game.timerInterval) {
+      clearInterval(game.timerInterval);
+      game.timerInterval = null;
+    }
+  }
+
+  function updateTimerDisplay() {
+    if (!game) return;
+    els.puzzleTimer.textContent = formatTime(Date.now() - game.startTime);
+  }
+
   function teardownGame() {
     if (!game) return;
+    stopTimer();
     boardResizeObserver.disconnect();
     els.tray.innerHTML = "";
     // Board-Kinder (ausser Guide-Bild) entfernen
@@ -212,6 +292,7 @@
     centerOrClampPan();
     applyBoardTransform();
     els.zoomResetBtn.hidden = true;
+    startTimer();
 
     updateProgress();
 
@@ -534,6 +615,8 @@
     game.locked++;
     updateProgress();
     if (game.locked >= game.total) {
+      game.elapsedMs = Date.now() - game.startTime;
+      stopTimer();
       setTimeout(showWin, 450);
     }
   }
@@ -575,7 +658,28 @@
 
   // ---------- Gewonnen ----------
   function showWin() {
+    const imageId = game.item.id;
+    const isNewBest = recordTime(imageId, selectedPieceCount, game.elapsedMs);
+
     els.winText.textContent = `${game.item.title} mit ${game.total} Teilen geloest!`;
+    els.winTime.textContent = isNewBest
+      ? `Deine Zeit: ${formatTime(game.elapsedMs)} (neue Bestzeit!)`
+      : `Deine Zeit: ${formatTime(game.elapsedMs)}`;
+
+    const times = loadTimes()[imageId] || {};
+    const rows = PIECE_COUNT_OPTIONS
+      .filter((count) => times[count] != null)
+      .map((count) => {
+        const current = count === selectedPieceCount ? " is-current" : "";
+        return `<div class="win-trophy-row${current}">
+          <span>🏆</span>
+          <span class="trophy-count">${count} Teile</span>
+          <span class="trophy-time">${formatTime(times[count])}</span>
+        </div>`;
+      });
+    els.winTrophies.innerHTML = rows.join("");
+    els.winTrophies.hidden = rows.length === 0;
+
     els.winOverlay.hidden = false;
   }
   els.winReplayBtn.addEventListener("click", () => {
@@ -585,6 +689,7 @@
   els.winGalleryBtn.addEventListener("click", () => {
     els.winOverlay.hidden = true;
     teardownGame();
+    renderGallery();
     showView(els.viewGallery);
   });
 

@@ -48,7 +48,10 @@
     <button class="btn-icon" id="puzzle-back-btn" aria-label="Zurueck">←</button>
     <div class="puzzle-header-info">
       <span id="puzzle-title" class="puzzle-title"></span>
-      <span id="puzzle-progress" class="puzzle-progress"></span>
+      <span class="puzzle-progress-row">
+        <span id="puzzle-progress" class="puzzle-progress"></span>
+        <span id="puzzle-timer" class="puzzle-timer">00:00:00</span>
+      </span>
     </div>
     <button class="btn-icon" id="puzzle-zoom-reset-btn" aria-label="Zoom zuruecksetzen" title="Zoom zuruecksetzen" hidden>1:1</button>
     <button class="btn-icon" id="puzzle-preview-btn" aria-label="Vorschau anzeigen" title="Vorschau">👁</button>
@@ -80,6 +83,8 @@
     <div class="win-emoji">🎉</div>
     <h2>Geschafft!</h2>
     <p id="win-text"></p>
+    <p id="win-time" class="win-time"></p>
+    <div id="win-trophies" class="win-trophies" hidden></div>
     <div class="win-actions">
       <button id="win-replay-btn" class="btn-secondary">Nochmal</button>
       <button id="win-gallery-btn" class="btn-primary">Neues Motiv</button>
