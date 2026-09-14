@@ -2,7 +2,7 @@
 // zwischengespeichert. Neue Galerie-Bilder werden beim ersten Aufruf automatisch
 // mit-gecacht (runtime cache), ohne dass diese Datei angepasst werden muss.
 
-const CACHE_VERSION = "v10";
+const CACHE_VERSION = "v11";
 const CACHE_NAME = `puzzle-spass-${CACHE_VERSION}`;
 
 // App-Shell-Dateien aendern sich beim Entwickeln haeufig -> immer zuerst das
@@ -33,6 +33,26 @@ const APP_SHELL = [
   "./images/full/mountains.jpg",
   "./images/full/rabbit.jpg",
   "./images/full/sunset.jpg",
+  "./images/full/fox.jpg",
+  "./images/full/owl.jpg",
+  "./images/full/horse.jpg",
+  "./images/full/panda.jpg",
+  "./images/full/autumn_forest.jpg",
+  "./images/full/waterfall.jpg",
+  "./images/full/desert.jpg",
+  "./images/full/aurora.jpg",
+  "./images/full/flower_lavender.jpg",
+  "./images/full/flower_cherry_blossom.jpg",
+  "./images/full/city_skyline_night.jpg",
+  "./images/full/city_street_neon.jpg",
+  "./images/full/city_bridge_night.jpg",
+  "./images/full/space_nebula.jpg",
+  "./images/full/space_planets.jpg",
+  "./images/full/space_moon.jpg",
+  "./images/full/underwater_reef.jpg",
+  "./images/full/underwater_whale.jpg",
+  "./images/full/winter_forest.jpg",
+  "./images/full/winter_village.jpg",
   "./images/thumb/beach.jpg",
   "./images/thumb/flower_meadow.jpg",
   "./images/thumb/flower_roses.jpg",
@@ -43,6 +63,26 @@ const APP_SHELL = [
   "./images/thumb/mountains.jpg",
   "./images/thumb/rabbit.jpg",
   "./images/thumb/sunset.jpg",
+  "./images/thumb/fox.jpg",
+  "./images/thumb/owl.jpg",
+  "./images/thumb/horse.jpg",
+  "./images/thumb/panda.jpg",
+  "./images/thumb/autumn_forest.jpg",
+  "./images/thumb/waterfall.jpg",
+  "./images/thumb/desert.jpg",
+  "./images/thumb/aurora.jpg",
+  "./images/thumb/flower_lavender.jpg",
+  "./images/thumb/flower_cherry_blossom.jpg",
+  "./images/thumb/city_skyline_night.jpg",
+  "./images/thumb/city_street_neon.jpg",
+  "./images/thumb/city_bridge_night.jpg",
+  "./images/thumb/space_nebula.jpg",
+  "./images/thumb/space_planets.jpg",
+  "./images/thumb/space_moon.jpg",
+  "./images/thumb/underwater_reef.jpg",
+  "./images/thumb/underwater_whale.jpg",
+  "./images/thumb/winter_forest.jpg",
+  "./images/thumb/winter_village.jpg",
 ];
 
 self.addEventListener("install", (event) => {
