@@ -16,8 +16,10 @@
     puzzleTitle: document.getElementById("puzzle-title"),
     puzzleProgress: document.getElementById("puzzle-progress"),
     puzzlePreviewBtn: document.getElementById("puzzle-preview-btn"),
+    zoomResetBtn: document.getElementById("puzzle-zoom-reset-btn"),
     boardWrap: document.getElementById("board-wrap"),
     board: document.getElementById("board"),
+    boardInner: document.getElementById("board-inner"),
     boardGuideImg: document.getElementById("board-guide-img"),
     trayWrap: document.getElementById("tray-wrap"),
     tray: document.getElementById("tray"),
@@ -33,6 +35,7 @@
   let selectedImage = null;
   let selectedPieceCount = null;
   let game = null; // aktueller Puzzle-Zustand
+  const MAX_ZOOM = 4;
 
   function showView(view) {
     [els.viewGallery, els.viewSetup, els.viewPuzzle].forEach(v => v.classList.remove("view--active"));
@@ -125,6 +128,7 @@
     // Board-Kinder (ausser Guide-Bild) entfernen
     [...els.board.querySelectorAll(".piece-canvas")].forEach(el => el.remove());
     game = null;
+    els.zoomResetBtn.hidden = true;
   }
 
   function buildGame(item, img, pieceCount) {
@@ -151,7 +155,10 @@
       total: pieces.length,
       locked: 0,
       guideVisible: false,
+      zoom: 1, panX: 0, panY: 0,
     };
+    applyBoardTransform();
+    els.zoomResetBtn.hidden = true;
 
     updateProgress();
 
@@ -175,6 +182,10 @@
 
   function relayoutBoard() {
     if (!game) return;
+    // Bei Groessen-/Ausrichtungsaenderung Zoom zuruecksetzen, damit die
+    // Ansicht nicht verzerrt oder ausserhalb des sichtbaren Bereichs landet.
+    game.zoom = 1; game.panX = 0; game.panY = 0;
+    applyBoardTransform();
     const scale = boardScale();
     game.pieces.forEach(piece => {
       if (piece.state === "locked") {
@@ -196,6 +207,119 @@
     canvas.style.height = piece.boxH * scale + "px";
     canvas.style.transform = `translate(${piece.boardX * scale}px, ${piece.boardY * scale}px)`;
   }
+
+  // ---------- Zoom & Pan im Spielfeld ----------
+  function applyBoardTransform() {
+    if (!game) return;
+    els.boardInner.style.transform = `translate(${game.panX}px, ${game.panY}px) scale(${game.zoom})`;
+    const zoomedIn = game.zoom > 1.01;
+    els.zoomResetBtn.hidden = !zoomedIn;
+  }
+
+  function clampPan() {
+    const rect = els.board.getBoundingClientRect();
+    const minX = rect.width * (1 - game.zoom);
+    const minY = rect.height * (1 - game.zoom);
+    game.panX = Math.min(0, Math.max(minX, game.panX));
+    game.panY = Math.min(0, Math.max(minY, game.panY));
+  }
+
+  function setZoomAroundPoint(newZoom, clientX, clientY) {
+    const rect = els.board.getBoundingClientRect();
+    const clamped = Math.min(MAX_ZOOM, Math.max(1, newZoom));
+    const localX = (clientX - rect.left - game.panX) / game.zoom;
+    const localY = (clientY - rect.top - game.panY) / game.zoom;
+    game.panX = (clientX - rect.left) - localX * clamped;
+    game.panY = (clientY - rect.top) - localY * clamped;
+    game.zoom = clamped;
+    clampPan();
+    applyBoardTransform();
+  }
+
+  els.zoomResetBtn.addEventListener("click", () => {
+    if (!game) return;
+    game.zoom = 1; game.panX = 0; game.panY = 0;
+    applyBoardTransform();
+  });
+
+  els.board.addEventListener("wheel", (e) => {
+    if (!game) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0015);
+    setZoomAroundPoint(game.zoom * factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  els.board.addEventListener("dblclick", () => {
+    if (!game) return;
+    game.zoom = 1; game.panX = 0; game.panY = 0;
+    applyBoardTransform();
+  });
+
+  // Pinch-Zoom / Ein-Finger-Pan (nur ausserhalb von Puzzleteilen, sonst Konflikt mit Drag)
+  const boardPointers = new Map();
+  let pinchState = null;
+  let panState = null;
+
+  function isOnPiece(target) {
+    return !!(target && target.closest && target.closest(".piece-canvas"));
+  }
+
+  els.board.addEventListener("pointerdown", (e) => {
+    if (!game || isOnPiece(e.target)) return;
+    boardPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (boardPointers.size === 1 && game.zoom > 1.01) {
+      panState = { startX: e.clientX, startY: e.clientY, startPanX: game.panX, startPanY: game.panY };
+    } else if (boardPointers.size === 2) {
+      panState = null;
+      const pts = [...boardPointers.values()];
+      pinchState = {
+        startDist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+        startZoom: game.zoom,
+        startPanX: game.panX, startPanY: game.panY,
+        startMidX: (pts[0].x + pts[1].x) / 2, startMidY: (pts[0].y + pts[1].y) / 2,
+      };
+    }
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!game || !boardPointers.has(e.pointerId)) return;
+    boardPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (boardPointers.size === 2 && pinchState) {
+      e.preventDefault();
+      const pts = [...boardPointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      const midX = (pts[0].x + pts[1].x) / 2, midY = (pts[0].y + pts[1].y) / 2;
+      const newZoom = Math.min(MAX_ZOOM, Math.max(1, pinchState.startZoom * (dist / pinchState.startDist)));
+      const rect = els.board.getBoundingClientRect();
+      const localX = (pinchState.startMidX - rect.left - pinchState.startPanX) / pinchState.startZoom;
+      const localY = (pinchState.startMidY - rect.top - pinchState.startPanY) / pinchState.startZoom;
+      game.zoom = newZoom;
+      game.panX = (midX - rect.left) - localX * newZoom;
+      game.panY = (midY - rect.top) - localY * newZoom;
+      clampPan();
+      applyBoardTransform();
+    } else if (boardPointers.size === 1 && panState) {
+      e.preventDefault();
+      game.panX = panState.startPanX + (e.clientX - panState.startX);
+      game.panY = panState.startPanY + (e.clientY - panState.startY);
+      clampPan();
+      applyBoardTransform();
+    }
+  }, { passive: false });
+
+  function releaseBoardPointer(e) {
+    if (!boardPointers.has(e.pointerId)) return;
+    boardPointers.delete(e.pointerId);
+    pinchState = null;
+    panState = null;
+    if (game && boardPointers.size === 1 && game.zoom > 1.01) {
+      const [remaining] = boardPointers.values();
+      panState = { startX: remaining.x, startY: remaining.y, startPanX: game.panX, startPanY: game.panY };
+    }
+  }
+  window.addEventListener("pointerup", releaseBoardPointer);
+  window.addEventListener("pointercancel", releaseBoardPointer);
 
   // ---------- Drag & Drop ----------
   function attachDragHandlers(piece) {
@@ -290,8 +414,11 @@
       if (pointerInBoard) {
         const pieceLeftClient = e.clientX - grabDX;
         const pieceTopClient = e.clientY - grabDY;
-        const imgX = (pieceLeftClient - boardRect.left) / scale;
-        const imgY = (pieceTopClient - boardRect.top) / scale;
+        // Bildschirm- zu Bild-Koordinaten, unter Beruecksichtigung von Zoom/Pan des Boards
+        const localX = (pieceLeftClient - boardRect.left - game.panX) / game.zoom;
+        const localY = (pieceTopClient - boardRect.top - game.panY) / game.zoom;
+        const imgX = localX / scale;
+        const imgY = localY / scale;
         const tolX = game.cellW * 0.4;
         const tolY = game.cellH * 0.4;
         const matches = Math.abs(imgX - piece.boardX) < tolX && Math.abs(imgY - piece.boardY) < tolY;
@@ -311,7 +438,7 @@
     const canvas = piece.canvas;
     const oldSlot = canvas.parentElement;
     piece.state = "locked";
-    els.board.appendChild(canvas);
+    els.boardInner.appendChild(canvas);
     if (oldSlot && oldSlot.classList.contains("tray-slot")) oldSlot.remove();
     positionPieceOnBoard(piece, scale);
     canvas.classList.add("locked");

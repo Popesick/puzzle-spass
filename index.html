@@ -50,13 +50,17 @@
       <span id="puzzle-title" class="puzzle-title"></span>
       <span id="puzzle-progress" class="puzzle-progress"></span>
     </div>
+    <button class="btn-icon" id="puzzle-zoom-reset-btn" aria-label="Zoom zuruecksetzen" title="Zoom zuruecksetzen" hidden>1:1</button>
     <button class="btn-icon" id="puzzle-preview-btn" aria-label="Vorschau anzeigen" title="Vorschau">👁</button>
   </header>
 
   <div id="board-wrap" class="board-wrap">
     <div id="board" class="board">
-      <img id="board-guide-img" class="board-guide-img" alt="" draggable="false" />
+      <div id="board-inner" class="board-inner">
+        <img id="board-guide-img" class="board-guide-img" alt="" draggable="false" />
+      </div>
     </div>
+    <p class="zoom-hint">Zum Vergroessern zwei Finger spreizen (oder Mausrad)</p>
   </div>
 
   <div id="tray-wrap" class="tray-wrap">

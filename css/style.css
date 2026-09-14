@@ -74,6 +74,14 @@ img { -webkit-user-drag: none; user-select: none; }
   flex: 0 0 auto;
 }
 .btn-icon:active { transform: scale(0.92); }
+#puzzle-zoom-reset-btn {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.btn-icon[hidden] {
+  display: none;
+}
 
 /* ---------- Gallery ---------- */
 .gallery-grid {
@@ -224,6 +232,12 @@ img { -webkit-user-drag: none; user-select: none; }
   touch-action: none;
 }
 
+.board-inner {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
 .board-guide-img {
   position: absolute;
   inset: 0;
@@ -234,12 +248,25 @@ img { -webkit-user-drag: none; user-select: none; }
   pointer-events: none;
 }
 
+.zoom-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  margin: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
 .piece-canvas {
   touch-action: none;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45));
   will-change: transform;
 }
-#board .piece-canvas,
+#board-inner .piece-canvas,
 #drag-layer .piece-canvas {
   position: absolute;
   left: 0;
@@ -291,7 +318,7 @@ img { -webkit-user-drag: none; user-select: none; }
   height: 100%;
   width: auto;
   display: block;
-  touch-action: none;
+  touch-action: pan-x;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45));
 }
 
