@@ -105,9 +105,12 @@
       // kurze Verzoegerung, damit der Spinner sicher gerendert wird bevor die
       // (synchrone, ggf. rechenintensive) Teile-Erzeugung den Thread blockiert
       setTimeout(() => {
+        // Ansicht zuerst aktivieren (Ladeoverlay verdeckt sie ohnehin noch),
+        // damit board-wrap beim Bauen bereits eine echte Groesse hat -
+        // sonst liefert computeBaseFit() wegen display:none 0x0.
+        showView(els.viewPuzzle);
         buildGame(item, img, pieceCount);
         els.loadingOverlay.hidden = true;
-        showView(els.viewPuzzle);
       }, 30);
     };
     img.onerror = () => {
@@ -121,29 +124,50 @@
     if (game) relayoutBoard();
   });
 
-  // Berechnet die groesstmoegliche Box mit dem Bildseitenverhaeltnis, die in
-  // board-wrap passt, und setzt die Board-Groesse explizit in Px. CSS-
-  // "aspect-ratio" zusammen mit width:100%/max-height:100% verhaelt sich je
-  // nach Browser/Seitenverhaeltnis des Fensters inkonsistent (das Board kann
-  // dabei ueber die verfuegbare Hoehe hinauswachsen und die Teile-Reihe
-  // ueberdecken) - deshalb wird die Groesse hier verlaesslich per JS bestimmt.
-  function fitBoardBox() {
-    if (!game) return;
+  // Das Spielfeld (.board) nutzt IMMER die komplette verfuegbare Flaeche von
+  // board-wrap - nicht nur eine 16:9-Box darin. Bei Zoom=1 wird das Bild per
+  // Transform auf board-inner passend hineingerechnet (Letterbox, wie ein
+  // Videoplayer); je weiter man reinzoomt, desto mehr fuellt der Bildinhalt
+  // diese ohnehin schon volle Flaeche aus - so wird beim Zoomen der ganze
+  // Bildschirm genutzt, statt nur eine kleine, aussen fixierte 16:9-Box.
+  function sizeBoardViewport() {
     const wrap = els.boardWrap;
     const cs = getComputedStyle(wrap);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    const availW = Math.max(0, wrap.clientWidth - padX);
-    const availH = Math.max(0, wrap.clientHeight - padY);
-    const ratio = game.imgW / game.imgH;
-    let w = availW;
-    let h = w / ratio;
-    if (h > availH) {
-      h = availH;
-      w = h * ratio;
-    }
+    const w = Math.max(0, wrap.clientWidth - padX);
+    const h = Math.max(0, wrap.clientHeight - padY);
     els.board.style.width = w + "px";
     els.board.style.height = h + "px";
+    return { w, h };
+  }
+
+  // Ermittelt den Skalierungsfaktor, mit dem das Bild bei Zoom=1 komplett
+  // (mit Letterbox-Raendern) in die aktuelle Spielfeld-Flaeche passt.
+  function computeBaseFit() {
+    const { w, h } = sizeBoardViewport();
+    game.outerW = w;
+    game.outerH = h;
+    game.baseScale = Math.min(w / game.imgW, h / game.imgH) || 1;
+  }
+
+  // Haelt den sichtbaren Bildinhalt zentriert, solange er (in einer Achse)
+  // kleiner als die verfuegbare Flaeche ist (Letterbox), und begrenzt das
+  // Verschieben (Pan) sobald er sie durch Zoom ueberragt.
+  function centerOrClampPan() {
+    const effScale = game.baseScale * game.zoom;
+    const contentW = game.imgW * effScale;
+    const contentH = game.imgH * effScale;
+    if (contentW <= game.outerW) {
+      game.panX = (game.outerW - contentW) / 2;
+    } else {
+      game.panX = Math.min(0, Math.max(game.outerW - contentW, game.panX));
+    }
+    if (contentH <= game.outerH) {
+      game.panY = (game.outerH - contentH) / 2;
+    } else {
+      game.panY = Math.min(0, Math.max(game.outerH - contentH, game.panY));
+    }
   }
 
   function teardownGame() {
@@ -180,8 +204,12 @@
       locked: 0,
       guideVisible: false,
       zoom: 1, panX: 0, panY: 0,
+      baseScale: 1, outerW: 0, outerH: 0,
     };
-    fitBoardBox();
+    els.boardGuideImg.style.width = built.imgW + "px";
+    els.boardGuideImg.style.height = built.imgH + "px";
+    computeBaseFit();
+    centerOrClampPan();
     applyBoardTransform();
     els.zoomResetBtn.hidden = true;
 
@@ -209,68 +237,67 @@
     if (!game) return;
     // Bei Groessen-/Ausrichtungsaenderung Zoom zuruecksetzen, damit die
     // Ansicht nicht verzerrt oder ausserhalb des sichtbaren Bereichs landet.
-    game.zoom = 1; game.panX = 0; game.panY = 0;
-    fitBoardBox();
+    game.zoom = 1;
+    computeBaseFit();
+    centerOrClampPan();
     applyBoardTransform();
-    const scale = boardScale();
     game.pieces.forEach(piece => {
       if (piece.state === "locked") {
-        renderPieceOnBoard(piece, scale, piece.boardX, piece.boardY);
+        renderPieceOnBoard(piece, piece.boardX, piece.boardY);
       } else if (piece.state === "free") {
-        renderPieceOnBoard(piece, scale, piece.freeX, piece.freeY);
+        renderPieceOnBoard(piece, piece.freeX, piece.freeY);
       }
     });
   }
 
-  function boardScale() {
-    const rect = els.board.getBoundingClientRect();
-    return rect.width / game.imgW;
-  }
-
-  // Positioniert ein Puzzleteil im Spielfeld an einer Bild-Koordinate (imgX/imgY).
-  // Wird sowohl fuer korrekt eingerastete als auch fuer frei abgelegte Teile genutzt.
-  function renderPieceOnBoard(piece, scale, imgX, imgY) {
+  // Positioniert ein Puzzleteil im Spielfeld an einer Bild-Koordinate
+  // (imgX/imgY, in unskalierten Bild-Px). Skalierung/Zoom/Pan uebernimmt
+  // allein der Transform von #board-inner - das Teil selbst braucht seine
+  // rohe Bildgroesse/-position, egal ob eingerastet oder frei abgelegt.
+  function renderPieceOnBoard(piece, imgX, imgY) {
     const canvas = piece.canvas;
     canvas.style.left = "0";
     canvas.style.top = "0";
-    canvas.style.width = piece.boxW * scale + "px";
-    canvas.style.height = piece.boxH * scale + "px";
-    canvas.style.transform = `translate(${imgX * scale}px, ${imgY * scale}px)`;
+    canvas.style.width = piece.boxW + "px";
+    canvas.style.height = piece.boxH + "px";
+    canvas.style.transform = `translate(${imgX}px, ${imgY}px)`;
   }
 
   // ---------- Zoom & Pan im Spielfeld ----------
-  function applyBoardTransform() {
-    if (!game) return;
-    els.boardInner.style.transform = `translate(${game.panX}px, ${game.panY}px) scale(${game.zoom})`;
-    const zoomedIn = game.zoom > 1.01;
-    els.zoomResetBtn.hidden = !zoomedIn;
+  // Effektiver Massstab Bild-Px -> Bildschirm-Px (Basis-Einpassung * Zoom).
+  function effectiveScale() {
+    return game.baseScale * game.zoom;
   }
 
-  function clampPan() {
-    const rect = els.board.getBoundingClientRect();
-    const minX = rect.width * (1 - game.zoom);
-    const minY = rect.height * (1 - game.zoom);
-    game.panX = Math.min(0, Math.max(minX, game.panX));
-    game.panY = Math.min(0, Math.max(minY, game.panY));
+  function applyBoardTransform() {
+    if (!game) return;
+    els.boardInner.style.transform = `translate(${game.panX}px, ${game.panY}px) scale(${effectiveScale()})`;
+    const zoomedIn = game.zoom > 1.01;
+    els.zoomResetBtn.hidden = !zoomedIn;
   }
 
   function setZoomAroundPoint(newZoom, clientX, clientY) {
     const rect = els.board.getBoundingClientRect();
     const clamped = Math.min(MAX_ZOOM, Math.max(1, newZoom));
-    const localX = (clientX - rect.left - game.panX) / game.zoom;
-    const localY = (clientY - rect.top - game.panY) / game.zoom;
-    game.panX = (clientX - rect.left) - localX * clamped;
-    game.panY = (clientY - rect.top) - localY * clamped;
+    const oldScale = effectiveScale();
+    const localX = (clientX - rect.left - game.panX) / oldScale;
+    const localY = (clientY - rect.top - game.panY) / oldScale;
     game.zoom = clamped;
-    clampPan();
+    const newScale = effectiveScale();
+    game.panX = (clientX - rect.left) - localX * newScale;
+    game.panY = (clientY - rect.top) - localY * newScale;
+    centerOrClampPan();
     applyBoardTransform();
   }
 
-  els.zoomResetBtn.addEventListener("click", () => {
+  function resetZoom() {
     if (!game) return;
-    game.zoom = 1; game.panX = 0; game.panY = 0;
+    game.zoom = 1;
+    centerOrClampPan();
     applyBoardTransform();
-  });
+  }
+
+  els.zoomResetBtn.addEventListener("click", resetZoom);
 
   els.board.addEventListener("wheel", (e) => {
     if (!game) return;
@@ -279,11 +306,7 @@
     setZoomAroundPoint(game.zoom * factor, e.clientX, e.clientY);
   }, { passive: false });
 
-  els.board.addEventListener("dblclick", () => {
-    if (!game) return;
-    game.zoom = 1; game.panX = 0; game.panY = 0;
-    applyBoardTransform();
-  });
+  els.board.addEventListener("dblclick", resetZoom);
 
   // Pinch-Zoom / Ein-Finger-Pan (nur ausserhalb von Puzzleteilen, sonst Konflikt mit Drag)
   const boardPointers = new Map();
@@ -322,18 +345,20 @@
       const midX = (pts[0].x + pts[1].x) / 2, midY = (pts[0].y + pts[1].y) / 2;
       const newZoom = Math.min(MAX_ZOOM, Math.max(1, pinchState.startZoom * (dist / pinchState.startDist)));
       const rect = els.board.getBoundingClientRect();
-      const localX = (pinchState.startMidX - rect.left - pinchState.startPanX) / pinchState.startZoom;
-      const localY = (pinchState.startMidY - rect.top - pinchState.startPanY) / pinchState.startZoom;
+      const oldScale = game.baseScale * pinchState.startZoom;
+      const localX = (pinchState.startMidX - rect.left - pinchState.startPanX) / oldScale;
+      const localY = (pinchState.startMidY - rect.top - pinchState.startPanY) / oldScale;
       game.zoom = newZoom;
-      game.panX = (midX - rect.left) - localX * newZoom;
-      game.panY = (midY - rect.top) - localY * newZoom;
-      clampPan();
+      const newScale = game.baseScale * newZoom;
+      game.panX = (midX - rect.left) - localX * newScale;
+      game.panY = (midY - rect.top) - localY * newScale;
+      centerOrClampPan();
       applyBoardTransform();
     } else if (boardPointers.size === 1 && panState) {
       e.preventDefault();
       game.panX = panState.startPanX + (e.clientX - panState.startX);
       game.panY = panState.startPanY + (e.clientY - panState.startY);
-      clampPan();
+      centerOrClampPan();
       applyBoardTransform();
     }
   }, { passive: false });
@@ -411,7 +436,7 @@
         overBoard = nowOverBoard;
         let w, h;
         if (overBoard) {
-          const s = boardScale() * game.zoom;
+          const s = effectiveScale();
           w = piece.boxW * s;
           h = piece.boxH * s;
         } else {
@@ -467,25 +492,23 @@
       try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
 
       const boardRect = els.board.getBoundingClientRect();
-      const scale = boardScale();
       const pointerInBoard = isOverBoard(e.clientX, e.clientY);
 
       if (pointerInBoard) {
         const pieceLeftClient = e.clientX - curGrabDX;
         const pieceTopClient = e.clientY - curGrabDY;
         // Bildschirm- zu Bild-Koordinaten, unter Beruecksichtigung von Zoom/Pan des Boards
-        const localX = (pieceLeftClient - boardRect.left - game.panX) / game.zoom;
-        const localY = (pieceTopClient - boardRect.top - game.panY) / game.zoom;
-        const imgX = localX / scale;
-        const imgY = localY / scale;
+        const scale = effectiveScale();
+        const imgX = (pieceLeftClient - boardRect.left - game.panX) / scale;
+        const imgY = (pieceTopClient - boardRect.top - game.panY) / scale;
         const tolX = game.cellW * 0.4;
         const tolY = game.cellH * 0.4;
         const matches = Math.abs(imgX - piece.boardX) < tolX && Math.abs(imgY - piece.boardY) < tolY;
 
         if (matches) {
-          lockPiece(piece, scale);
+          lockPiece(piece);
         } else {
-          placeFreeOnBoard(piece, scale, imgX, imgY);
+          placeFreeOnBoard(piece, imgX, imgY);
         }
         return;
       }
@@ -495,13 +518,13 @@
     canvas.addEventListener("pointerdown", onPointerDown);
   }
 
-  function lockPiece(piece, scale) {
+  function lockPiece(piece) {
     const canvas = piece.canvas;
     const oldParent = canvas.parentElement;
     piece.state = "locked";
     els.boardInner.appendChild(canvas);
     if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
-    renderPieceOnBoard(piece, scale, piece.boardX, piece.boardY);
+    renderPieceOnBoard(piece, piece.boardX, piece.boardY);
     canvas.classList.add("locked");
     canvas.style.pointerEvents = "none";
     void canvas.offsetWidth; // reflow, damit die Animation neu startet
@@ -517,7 +540,7 @@
 
   // Teil frei im Spielfeld ablegen, auch wenn es (noch) nicht an der richtigen
   // Stelle liegt. Bleibt beweglich und kann spaeter feinjustiert werden.
-  function placeFreeOnBoard(piece, scale, imgX, imgY) {
+  function placeFreeOnBoard(piece, imgX, imgY) {
     const canvas = piece.canvas;
     const oldParent = canvas.parentElement;
     piece.state = "free";
@@ -525,7 +548,7 @@
     piece.freeY = imgY;
     els.boardInner.appendChild(canvas);
     if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
-    renderPieceOnBoard(piece, scale, imgX, imgY);
+    renderPieceOnBoard(piece, imgX, imgY);
     canvas.classList.remove("dragging");
   }
 

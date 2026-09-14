@@ -241,11 +241,12 @@ img { -webkit-user-drag: none; user-select: none; }
 }
 
 .board-guide-img {
+  /* Groesse wird von app.js in echten Bild-Px gesetzt (passend zu den
+     Puzzleteil-Koordinaten) - der Zoom/Pan-Transform von board-inner
+     skaliert dann Bild und Teile gemeinsam und konsistent. */
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  left: 0;
+  top: 0;
   opacity: 0.16;
   pointer-events: none;
 }
