@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Puzzle Spass</title>
+<meta name="description" content="Ein Puzzle-Spiel mit wechselbaren Motiven fuer Handy, Tablet und Desktop." />
+<meta name="theme-color" content="#2a2540" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Puzzle Spass" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Galerie-Ansicht -->
+<section id="view-gallery" class="view view--active">
+  <header class="app-header">
+    <h1>🧩 Puzzle Spass</h1>
+    <p class="app-subtitle">Waehle ein Motiv aus</p>
+  </header>
+  <div id="gallery-grid" class="gallery-grid"></div>
+</section>
+
+<!-- Motiv & Teile-Auswahl -->
+<section id="view-setup" class="view">
+  <header class="app-header app-header--with-back">
+    <button class="btn-icon" id="setup-back-btn" aria-label="Zurueck">←</button>
+    <h1 id="setup-title">Motiv</h1>
+  </header>
+  <div class="setup-preview-wrap">
+    <img id="setup-preview-img" class="setup-preview-img" alt="" />
+  </div>
+  <div class="setup-piece-count">
+    <p class="setup-label">Wie viele Puzzleteile?</p>
+    <div id="piece-count-options" class="piece-count-options"></div>
+  </div>
+  <button id="start-puzzle-btn" class="btn-primary" disabled>Puzzle starten</button>
+</section>
+
+<!-- Puzzle-Ansicht -->
+<section id="view-puzzle" class="view">
+  <header class="puzzle-header">
+    <button class="btn-icon" id="puzzle-back-btn" aria-label="Zurueck">←</button>
+    <div class="puzzle-header-info">
+      <span id="puzzle-title" class="puzzle-title"></span>
+      <span id="puzzle-progress" class="puzzle-progress"></span>
+    </div>
+    <button class="btn-icon" id="puzzle-preview-btn" aria-label="Vorschau anzeigen" title="Vorschau">👁</button>
+  </header>
+
+  <div id="board-wrap" class="board-wrap">
+    <div id="board" class="board">
+      <img id="board-guide-img" class="board-guide-img" alt="" draggable="false" />
+    </div>
+  </div>
+
+  <div id="tray-wrap" class="tray-wrap">
+    <div id="tray" class="tray"></div>
+  </div>
+</section>
+
+<!-- Ladeanzeige -->
+<div id="loading-overlay" class="loading-overlay" hidden>
+  <div class="spinner"></div>
+  <p id="loading-text">Puzzle wird vorbereitet...</p>
+</div>
+
+<!-- Gewonnen-Overlay -->
+<div id="win-overlay" class="win-overlay" hidden>
+  <div class="win-card">
+    <div class="win-emoji">🎉</div>
+    <h2>Geschafft!</h2>
+    <p id="win-text"></p>
+    <div class="win-actions">
+      <button id="win-replay-btn" class="btn-secondary">Nochmal</button>
+      <button id="win-gallery-btn" class="btn-primary">Neues Motiv</button>
+    </div>
+  </div>
+</div>
+
+<div id="drag-layer" class="drag-layer"></div>
+
+<script src="js/gallery-data.js"></script>
+<script src="js/puzzle-engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
