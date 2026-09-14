@@ -2,7 +2,7 @@
 // zwischengespeichert. Neue Galerie-Bilder werden beim ersten Aufruf automatisch
 // mit-gecacht (runtime cache), ohne dass diese Datei angepasst werden muss.
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = `puzzle-spass-${CACHE_VERSION}`;
 
 // App-Shell-Dateien aendern sich beim Entwickeln haeufig -> immer zuerst das
@@ -72,9 +72,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
 
   if (isNetworkFirst(url)) {
-    // Network-first: App-Code/HTML immer aktuell, Cache nur als Offline-Fallback.
+    // Network-first: App-Code/HTML immer aktuell. cache:"no-store" umgeht
+    // zusaetzlich den normalen HTTP-Browser-Cache (nicht nur den SW-Cache),
+    // sonst koennte trotz "network-first" eine veraltete, aber laut
+    // Cache-Control noch "frische" Antwort aus dem HTTP-Cache kommen.
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: "no-store" })
         .then((res) => { cachePut(req, res); return res; })
         .catch(() => caches.match(req))
     );
