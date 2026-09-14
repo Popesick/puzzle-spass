@@ -146,6 +146,14 @@ img { -webkit-user-drag: none; user-select: none; }
   overflow-y: auto;
 }
 .setup-label { margin: 0 0 10px; color: var(--text-dim); font-size: 0.9rem; }
+#setup-trophies { margin: 0 0 16px; }
+.setup-trophies-label {
+  margin: 0 0 2px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 .piece-count-options {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));

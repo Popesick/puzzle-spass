@@ -11,6 +11,7 @@
     setupTitle: document.getElementById("setup-title"),
     setupPreviewImg: document.getElementById("setup-preview-img"),
     pieceCountOptions: document.getElementById("piece-count-options"),
+    setupTrophies: document.getElementById("setup-trophies"),
     startPuzzleBtn: document.getElementById("start-puzzle-btn"),
     puzzleBackBtn: document.getElementById("puzzle-back-btn"),
     puzzleTitle: document.getElementById("puzzle-title"),
@@ -91,6 +92,24 @@
     imgEl.classList.toggle("solved-complete", isFullySolved(imageId));
   }
 
+  // Baut die Trophaeen-Zeilen (🏆 Teilezahl - Zeit) fuer ein Motiv, nur fuer
+  // tatsaechlich geloeste Teilezahlen. Wird sowohl im Erfolgs-Overlay als
+  // auch in der Motiv-/Teile-Auswahl verwendet.
+  function trophyRowsHtml(imageId, currentCount) {
+    const times = loadTimes()[imageId] || {};
+    return PIECE_COUNT_OPTIONS
+      .filter((count) => times[count] != null)
+      .map((count) => {
+        const current = count === currentCount ? " is-current" : "";
+        return `<div class="win-trophy-row${current}">
+          <span>🏆</span>
+          <span class="trophy-count">${count} Teile</span>
+          <span class="trophy-time">${formatTime(times[count])}</span>
+        </div>`;
+      })
+      .join("");
+  }
+
   function showView(view) {
     [els.viewGallery, els.viewSetup, els.viewPuzzle].forEach(v => v.classList.remove("view--active"));
     view.classList.add("view--active");
@@ -122,6 +141,11 @@
     els.setupPreviewImg.alt = item.title;
     markSolvedThumb(els.setupPreviewImg, item.id);
     els.startPuzzleBtn.disabled = true;
+
+    const rows = trophyRowsHtml(item.id, null);
+    els.setupTrophies.querySelectorAll(".win-trophy-row").forEach((r) => r.remove());
+    els.setupTrophies.insertAdjacentHTML("beforeend", rows);
+    els.setupTrophies.hidden = rows.length === 0;
 
     els.pieceCountOptions.innerHTML = "";
     PIECE_COUNT_OPTIONS.forEach(count => {
@@ -789,18 +813,8 @@
       ? `Deine Zeit: ${formatTime(game.elapsedMs)} (neue Bestzeit!)`
       : `Deine Zeit: ${formatTime(game.elapsedMs)}`;
 
-    const times = loadTimes()[imageId] || {};
-    const rows = PIECE_COUNT_OPTIONS
-      .filter((count) => times[count] != null)
-      .map((count) => {
-        const current = count === selectedPieceCount ? " is-current" : "";
-        return `<div class="win-trophy-row${current}">
-          <span>🏆</span>
-          <span class="trophy-count">${count} Teile</span>
-          <span class="trophy-time">${formatTime(times[count])}</span>
-        </div>`;
-      });
-    els.winTrophies.innerHTML = rows.join("");
+    const rows = trophyRowsHtml(imageId, selectedPieceCount);
+    els.winTrophies.innerHTML = rows;
     els.winTrophies.hidden = rows.length === 0;
 
     els.winOverlay.hidden = false;
