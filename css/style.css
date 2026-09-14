@@ -220,11 +220,13 @@ img { -webkit-user-drag: none; user-select: none; }
 }
 
 .board {
+  /* Groesse wird von app.js (fitBoardBox) exakt in Px gesetzt, damit das
+     Seitenverhaeltnis unabhaengig vom Fensterformat immer stimmt und die
+     Reihe unten nie ueberdeckt wird. max-width/-height bleiben als Fallback,
+     falls JS die Groesse einmal noch nicht gesetzt hat. */
   position: relative;
-  aspect-ratio: 16/9;
   max-width: 100%;
   max-height: 100%;
-  width: 100%;
   background: var(--board-bg);
   border-radius: 10px;
   box-shadow: inset 0 0 0 2px rgba(255,255,255,0.06);

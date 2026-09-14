@@ -2,7 +2,7 @@
 // zwischengespeichert. Neue Galerie-Bilder werden beim ersten Aufruf automatisch
 // mit-gecacht (runtime cache), ohne dass diese Datei angepasst werden muss.
 
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = `puzzle-spass-${CACHE_VERSION}`;
 
 // App-Shell-Dateien aendern sich beim Entwickeln haeufig -> immer zuerst das

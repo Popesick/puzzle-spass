@@ -121,6 +121,31 @@
     if (game) relayoutBoard();
   });
 
+  // Berechnet die groesstmoegliche Box mit dem Bildseitenverhaeltnis, die in
+  // board-wrap passt, und setzt die Board-Groesse explizit in Px. CSS-
+  // "aspect-ratio" zusammen mit width:100%/max-height:100% verhaelt sich je
+  // nach Browser/Seitenverhaeltnis des Fensters inkonsistent (das Board kann
+  // dabei ueber die verfuegbare Hoehe hinauswachsen und die Teile-Reihe
+  // ueberdecken) - deshalb wird die Groesse hier verlaesslich per JS bestimmt.
+  function fitBoardBox() {
+    if (!game) return;
+    const wrap = els.boardWrap;
+    const cs = getComputedStyle(wrap);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const availW = Math.max(0, wrap.clientWidth - padX);
+    const availH = Math.max(0, wrap.clientHeight - padY);
+    const ratio = game.imgW / game.imgH;
+    let w = availW;
+    let h = w / ratio;
+    if (h > availH) {
+      h = availH;
+      w = h * ratio;
+    }
+    els.board.style.width = w + "px";
+    els.board.style.height = h + "px";
+  }
+
   function teardownGame() {
     if (!game) return;
     boardResizeObserver.disconnect();
@@ -138,7 +163,6 @@
     const { rows, cols } = PuzzleEngine.computeGrid(pieceCount, aspect);
     const built = PuzzleEngine.buildPieces(img, rows, cols);
 
-    els.board.style.aspectRatio = `${built.imgW} / ${built.imgH}`;
     els.boardGuideImg.src = item.full;
     els.puzzleTitle.textContent = `${item.title}`;
 
@@ -157,6 +181,7 @@
       guideVisible: false,
       zoom: 1, panX: 0, panY: 0,
     };
+    fitBoardBox();
     applyBoardTransform();
     els.zoomResetBtn.hidden = true;
 
@@ -173,7 +198,7 @@
       attachDragHandlers(piece);
     });
 
-    boardResizeObserver.observe(els.board);
+    boardResizeObserver.observe(els.boardWrap);
   }
 
   function updateProgress() {
@@ -185,6 +210,7 @@
     // Bei Groessen-/Ausrichtungsaenderung Zoom zuruecksetzen, damit die
     // Ansicht nicht verzerrt oder ausserhalb des sichtbaren Bereichs landet.
     game.zoom = 1; game.panX = 0; game.panY = 0;
+    fitBoardBox();
     applyBoardTransform();
     const scale = boardScale();
     game.pieces.forEach(piece => {
