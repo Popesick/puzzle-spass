@@ -274,10 +274,14 @@
       ...p,
       id: idx,
       state: "tray",
+      groupId: idx, // Gruppenzugehoerigkeit; "locked" ist die reservierte ID der fertig geloesten Gruppe
+      curX: null, curY: null, // aktuelle Bild-Px-Position, solange auf dem Spielfeld platziert
     }));
+    const pieceByRowCol = new Map();
+    pieces.forEach((p) => pieceByRowCol.set(`${p.row},${p.col}`, p));
 
     game = {
-      item, pieces,
+      item, pieces, pieceByRowCol,
       imgW: built.imgW, imgH: built.imgH,
       cellW: built.cellW, cellH: built.cellH,
       total: pieces.length,
@@ -323,10 +327,8 @@
     centerOrClampPan();
     applyBoardTransform();
     game.pieces.forEach(piece => {
-      if (piece.state === "locked") {
-        renderPieceOnBoard(piece, piece.boardX, piece.boardY);
-      } else if (piece.state === "free") {
-        renderPieceOnBoard(piece, piece.freeX, piece.freeY);
+      if (piece.curX != null) {
+        renderPieceOnBoard(piece, piece.curX, piece.curY);
       }
     });
   }
@@ -463,15 +465,116 @@
     return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
   }
 
+  // ---------- Gruppen: zusammenpassende Teile verbinden sich unabhaengig
+  // von ihrer Position auf dem Spielfeld und werden gemeinsam verschoben.
+  // "locked" ist die reservierte Gruppen-ID der fertig geloesten Teile.
+  function getGroupPieces(groupId) {
+    return game.pieces.filter((p) => p.groupId === groupId);
+  }
+
+  function getNeighborPiece(piece, dr, dc) {
+    return game.pieceByRowCol.get(`${piece.row + dr},${piece.col + dc}`) || null;
+  }
+
+  function neighborsOf(piece) {
+    return [
+      getNeighborPiece(piece, -1, 0),
+      getNeighborPiece(piece, 1, 0),
+      getNeighborPiece(piece, 0, -1),
+      getNeighborPiece(piece, 0, 1),
+    ].filter(Boolean);
+  }
+
+  // Prueft fuer die gerade bewegten Teile, ob ein Nachbar aus einer anderen
+  // Gruppe jetzt an der richtigen relativen Position liegt, und dockt in dem
+  // Fall die ganze (bewegte) Gruppe exakt daran an. Wiederholt sich, falls
+  // dadurch weitere Verbindungen moeglich werden.
+  function settleGroup(movedPieces) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const p of movedPieces) {
+        for (const n of neighborsOf(p)) {
+          if (n.groupId === p.groupId || n.curX == null) continue;
+          const expectedX = n.curX + (p.boardX - n.boardX);
+          const expectedY = n.curY + (p.boardY - n.boardY);
+          if (Math.abs(p.curX - expectedX) < game.cellW * 0.4 &&
+              Math.abs(p.curY - expectedY) < game.cellH * 0.4) {
+            const dx = expectedX - p.curX;
+            const dy = expectedY - p.curY;
+            const newGroupId = n.groupId;
+            getGroupPieces(p.groupId).forEach((m) => {
+              m.curX += dx;
+              m.curY += dy;
+              m.groupId = newGroupId;
+            });
+            changed = true;
+            break;
+          }
+        }
+        if (changed) break;
+      }
+    }
+  }
+
+  // Nach einer Bewegung: prueft die finale Zielposition, verbindet mit
+  // Nachbarn (settleGroup) und schreibt das Ergebnis in DOM/State.
+  // Gibt zurueck, ob die (ggf. gewachsene) Gruppe komplett fertig sitzt.
+  function settleAndFinalize(anchorPiece, movedPieces) {
+    const tolX = game.cellW * 0.4;
+    const tolY = game.cellH * 0.4;
+    if (Math.abs(anchorPiece.curX - anchorPiece.boardX) < tolX &&
+        Math.abs(anchorPiece.curY - anchorPiece.boardY) < tolY) {
+      const fixDx = anchorPiece.boardX - anchorPiece.curX;
+      const fixDy = anchorPiece.boardY - anchorPiece.curY;
+      getGroupPieces(anchorPiece.groupId).forEach((m) => {
+        m.curX += fixDx;
+        m.curY += fixDy;
+        m.groupId = "locked";
+      });
+    }
+
+    settleGroup(movedPieces);
+
+    const isLocked = anchorPiece.groupId === "locked";
+    getGroupPieces(anchorPiece.groupId).forEach((m) => {
+      renderPieceOnBoard(m, m.curX, m.curY);
+      if (isLocked) {
+        if (m.state !== "locked") {
+          m.state = "locked";
+          m.canvas.classList.add("locked");
+          m.canvas.style.pointerEvents = "none";
+        }
+      } else {
+        m.state = "placed";
+      }
+      if (m.canvas.parentElement !== els.boardInner) {
+        els.boardInner.appendChild(m.canvas);
+      }
+    });
+    return isLocked;
+  }
+
+  function checkWin() {
+    game.locked = game.pieces.filter((p) => p.state === "locked").length;
+    updateProgress();
+    if (game.locked >= game.total) {
+      game.elapsedMs = Date.now() - game.startTime;
+      stopTimer();
+      setTimeout(showWin, 450);
+    }
+  }
+
   function attachDragHandlers(piece) {
     const canvas = piece.canvas;
     let mode = "idle"; // idle | pending | dragging
     let startX = 0, startY = 0;
     let source = "tray";
-    let originalW = 0, originalH = 0; // Groesse beim Aufnehmen (Tray- oder Board-Massstab)
+    let originalW = 0, originalH = 0; // Groesse beim Aufnehmen (nur fuer Tray-Herkunft relevant)
     let grabFracX = 0.5, grabFracY = 0.5; // Griffpunkt als Anteil der Teile-Breite/Hoehe
     let curGrabDX = 0, curGrabDY = 0; // aktueller Griffpunkt in Px (aendert sich mit der Groesse)
     let overBoard = false;
+    let groupMembers = []; // [{piece, offX, offY}] Bild-Px-Versatz der Gruppe relativ zum Anker
 
     function onPointerDown(e) {
       if (piece.state === "locked") return;
@@ -495,25 +598,52 @@
     function beginDrag(e) {
       mode = "dragging";
       canvas.setPointerCapture(e.pointerId);
-      const rect = canvas.getBoundingClientRect();
-      const oldParent = canvas.parentElement;
-      canvas.classList.add("dragging");
-      canvas.style.width = rect.width + "px";
-      canvas.style.height = rect.height + "px";
-      canvas.style.transform = "";
-      canvas.style.left = rect.left + "px";
-      canvas.style.top = rect.top + "px";
-      els.dragLayer.appendChild(canvas);
-      if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
+
+      if (source === "board") {
+        const anchorX = piece.curX, anchorY = piece.curY;
+        groupMembers = getGroupPieces(piece.groupId).map((m) => ({
+          piece: m, offX: m.curX - anchorX, offY: m.curY - anchorY,
+        }));
+      } else {
+        groupMembers = [{ piece, offX: 0, offY: 0 }];
+      }
+
+      const scaleNow = effectiveScale();
+      const boardRect = els.board.getBoundingClientRect();
+      groupMembers.forEach(({ piece: p }) => {
+        const c = p.canvas;
+        const oldParent = c.parentElement;
+        let w, h, left, top;
+        if (p === piece) {
+          const rect = c.getBoundingClientRect();
+          w = rect.width; h = rect.height; left = rect.left; top = rect.top;
+        } else {
+          w = p.boxW * scaleNow;
+          h = p.boxH * scaleNow;
+          left = boardRect.left + p.curX * scaleNow + game.panX;
+          top = boardRect.top + p.curY * scaleNow + game.panY;
+        }
+        c.classList.add("dragging");
+        c.style.width = w + "px";
+        c.style.height = h + "px";
+        c.style.transform = "";
+        c.style.left = left + "px";
+        c.style.top = top + "px";
+        els.dragLayer.appendChild(c);
+        if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
+      });
+
       overBoard = false;
       moveDragTo(e.clientX, e.clientY);
     }
 
-    // Waehrend des Ziehens automatisch auf Board-Groesse skalieren, sobald das
-    // Teil ueber das Spielfeld bewegt wird - macht das genaue Platzieren moeglich.
+    // Waehrend des Ziehens automatisch auf Board-Groesse skalieren, sobald ein
+    // frisch aus der Reihe gegriffenes Teil ueber das Spielfeld bewegt wird -
+    // macht das genaue Platzieren moeglich. Bereits platzierte (ggf. mehrteilige)
+    // Gruppen bleiben durchgehend in Board-Groesse.
     function moveDragTo(clientX, clientY) {
       const nowOverBoard = isOverBoard(clientX, clientY);
-      if (nowOverBoard !== overBoard) {
+      if (source === "tray" && nowOverBoard !== overBoard) {
         overBoard = nowOverBoard;
         let w, h;
         if (overBoard) {
@@ -529,8 +659,19 @@
         curGrabDX = grabFracX * w;
         curGrabDY = grabFracY * h;
       }
-      canvas.style.left = (clientX - curGrabDX) + "px";
-      canvas.style.top = (clientY - curGrabDY) + "px";
+      const anchorLeft = clientX - curGrabDX;
+      const anchorTop = clientY - curGrabDY;
+      canvas.style.left = anchorLeft + "px";
+      canvas.style.top = anchorTop + "px";
+
+      if (groupMembers.length > 1) {
+        const s = effectiveScale();
+        groupMembers.forEach(({ piece: p, offX, offY }) => {
+          if (p === piece) return;
+          p.canvas.style.left = (anchorLeft + offX * s) + "px";
+          p.canvas.style.top = (anchorTop + offY * s) + "px";
+        });
+      }
     }
 
     function onPointerMove(e) {
@@ -569,7 +710,7 @@
     }
 
     function finishDrag(e) {
-      canvas.classList.remove("dragging");
+      groupMembers.forEach(({ piece: p }) => p.canvas.classList.remove("dragging"));
       try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
 
       const boardRect = els.board.getBoundingClientRect();
@@ -582,60 +723,42 @@
         const scale = effectiveScale();
         const imgX = (pieceLeftClient - boardRect.left - game.panX) / scale;
         const imgY = (pieceTopClient - boardRect.top - game.panY) / scale;
-        const tolX = game.cellW * 0.4;
-        const tolY = game.cellH * 0.4;
-        const matches = Math.abs(imgX - piece.boardX) < tolX && Math.abs(imgY - piece.boardY) < tolY;
 
-        if (matches) {
-          lockPiece(piece);
+        if (source === "tray") {
+          piece.groupId = piece.id;
+          piece.curX = imgX;
+          piece.curY = imgY;
+          settleAndFinalize(piece, [piece]);
         } else {
-          placeFreeOnBoard(piece, imgX, imgY);
+          const movedPieces = groupMembers.map((gm) => gm.piece);
+          const dx = imgX - piece.curX;
+          const dy = imgY - piece.curY;
+          movedPieces.forEach((p) => { p.curX += dx; p.curY += dy; });
+          settleAndFinalize(piece, movedPieces);
         }
+        checkWin();
         return;
       }
-      returnToTray(piece);
+
+      // Ausserhalb des Spielfelds abgelegt
+      if (groupMembers.length > 1) {
+        // Eine mehrteilige Gruppe passt nicht in die Reihe -> an alte Position zurueck
+        groupMembers.forEach(({ piece: p, offX, offY }) => {
+          renderPieceOnBoard(p, piece.curX + offX, piece.curY + offY);
+          els.boardInner.appendChild(p.canvas);
+        });
+      } else {
+        returnToTray(piece);
+      }
     }
 
     canvas.addEventListener("pointerdown", onPointerDown);
   }
 
-  function lockPiece(piece) {
-    const canvas = piece.canvas;
-    const oldParent = canvas.parentElement;
-    piece.state = "locked";
-    els.boardInner.appendChild(canvas);
-    if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
-    renderPieceOnBoard(piece, piece.boardX, piece.boardY);
-    canvas.classList.add("locked");
-    canvas.style.pointerEvents = "none";
-    void canvas.offsetWidth; // reflow, damit die Animation neu startet
-    canvas.classList.add("snap-anim");
-    canvas.addEventListener("animationend", () => canvas.classList.remove("snap-anim"), { once: true });
-
-    game.locked++;
-    updateProgress();
-    if (game.locked >= game.total) {
-      game.elapsedMs = Date.now() - game.startTime;
-      stopTimer();
-      setTimeout(showWin, 450);
-    }
-  }
-
-  // Teil frei im Spielfeld ablegen, auch wenn es (noch) nicht an der richtigen
-  // Stelle liegt. Bleibt beweglich und kann spaeter feinjustiert werden.
-  function placeFreeOnBoard(piece, imgX, imgY) {
-    const canvas = piece.canvas;
-    const oldParent = canvas.parentElement;
-    piece.state = "free";
-    piece.freeX = imgX;
-    piece.freeY = imgY;
-    els.boardInner.appendChild(canvas);
-    if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
-    renderPieceOnBoard(piece, imgX, imgY);
-    canvas.classList.remove("dragging");
-  }
-
   function returnToTray(piece) {
+    piece.groupId = piece.id;
+    piece.curX = null;
+    piece.curY = null;
     const canvas = piece.canvas;
     piece.state = "tray";
     canvas.style.transform = "";

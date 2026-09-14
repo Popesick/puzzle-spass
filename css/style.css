@@ -298,15 +298,6 @@ img { -webkit-user-drag: none; user-select: none; }
   z-index: 500;
 }
 
-@keyframes pieceSnap {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.22); }
-  100% { transform: scale(1); }
-}
-.piece-canvas.snap-anim {
-  animation: pieceSnap 0.32s ease-out;
-}
-
 .tray-wrap {
   flex: 0 0 auto;
   height: clamp(84px, 16vh, 150px);
