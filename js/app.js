@@ -189,7 +189,9 @@
     const scale = boardScale();
     game.pieces.forEach(piece => {
       if (piece.state === "locked") {
-        positionPieceOnBoard(piece, scale);
+        renderPieceOnBoard(piece, scale, piece.boardX, piece.boardY);
+      } else if (piece.state === "free") {
+        renderPieceOnBoard(piece, scale, piece.freeX, piece.freeY);
       }
     });
   }
@@ -199,13 +201,15 @@
     return rect.width / game.imgW;
   }
 
-  function positionPieceOnBoard(piece, scale) {
+  // Positioniert ein Puzzleteil im Spielfeld an einer Bild-Koordinate (imgX/imgY).
+  // Wird sowohl fuer korrekt eingerastete als auch fuer frei abgelegte Teile genutzt.
+  function renderPieceOnBoard(piece, scale, imgX, imgY) {
     const canvas = piece.canvas;
     canvas.style.left = "0";
     canvas.style.top = "0";
     canvas.style.width = piece.boxW * scale + "px";
     canvas.style.height = piece.boxH * scale + "px";
-    canvas.style.transform = `translate(${piece.boardX * scale}px, ${piece.boardY * scale}px)`;
+    canvas.style.transform = `translate(${imgX * scale}px, ${imgY * scale}px)`;
   }
 
   // ---------- Zoom & Pan im Spielfeld ----------
@@ -322,12 +326,20 @@
   window.addEventListener("pointercancel", releaseBoardPointer);
 
   // ---------- Drag & Drop ----------
+  function isOverBoard(clientX, clientY) {
+    const r = els.board.getBoundingClientRect();
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+  }
+
   function attachDragHandlers(piece) {
     const canvas = piece.canvas;
-    let mode = "idle"; // idle | pending | dragging | scrolling
+    let mode = "idle"; // idle | pending | dragging
     let startX = 0, startY = 0;
-    let grabDX = 0, grabDY = 0; // Griffpunkt relativ zur Element-Ecke (CSS-Px)
     let source = "tray";
+    let originalW = 0, originalH = 0; // Groesse beim Aufnehmen (Tray- oder Board-Massstab)
+    let grabFracX = 0.5, grabFracY = 0.5; // Griffpunkt als Anteil der Teile-Breite/Hoehe
+    let curGrabDX = 0, curGrabDY = 0; // aktueller Griffpunkt in Px (aendert sich mit der Groesse)
+    let overBoard = false;
 
     function onPointerDown(e) {
       if (piece.state === "locked") return;
@@ -337,8 +349,12 @@
       startX = e.clientX;
       startY = e.clientY;
       const rect = canvas.getBoundingClientRect();
-      grabDX = e.clientX - rect.left;
-      grabDY = e.clientY - rect.top;
+      originalW = rect.width;
+      originalH = rect.height;
+      curGrabDX = e.clientX - rect.left;
+      curGrabDY = e.clientY - rect.top;
+      grabFracX = curGrabDX / (rect.width || 1);
+      grabFracY = curGrabDY / (rect.height || 1);
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
       window.addEventListener("pointercancel", onPointerUp);
@@ -348,22 +364,41 @@
       mode = "dragging";
       canvas.setPointerCapture(e.pointerId);
       const rect = canvas.getBoundingClientRect();
-      const oldSlot = canvas.parentElement;
+      const oldParent = canvas.parentElement;
       canvas.classList.add("dragging");
-      // feste Bildschirmgroesse fuers Ziehen beibehalten
       canvas.style.width = rect.width + "px";
       canvas.style.height = rect.height + "px";
       canvas.style.transform = "";
       canvas.style.left = rect.left + "px";
       canvas.style.top = rect.top + "px";
       els.dragLayer.appendChild(canvas);
-      if (oldSlot && oldSlot.classList.contains("tray-slot")) oldSlot.remove();
+      if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
+      overBoard = false;
       moveDragTo(e.clientX, e.clientY);
     }
 
+    // Waehrend des Ziehens automatisch auf Board-Groesse skalieren, sobald das
+    // Teil ueber das Spielfeld bewegt wird - macht das genaue Platzieren moeglich.
     function moveDragTo(clientX, clientY) {
-      canvas.style.left = (clientX - grabDX) + "px";
-      canvas.style.top = (clientY - grabDY) + "px";
+      const nowOverBoard = isOverBoard(clientX, clientY);
+      if (nowOverBoard !== overBoard) {
+        overBoard = nowOverBoard;
+        let w, h;
+        if (overBoard) {
+          const s = boardScale() * game.zoom;
+          w = piece.boxW * s;
+          h = piece.boxH * s;
+        } else {
+          w = originalW;
+          h = originalH;
+        }
+        canvas.style.width = w + "px";
+        canvas.style.height = h + "px";
+        curGrabDX = grabFracX * w;
+        curGrabDY = grabFracY * h;
+      }
+      canvas.style.left = (clientX - curGrabDX) + "px";
+      canvas.style.top = (clientY - curGrabDY) + "px";
     }
 
     function onPointerMove(e) {
@@ -407,13 +442,11 @@
 
       const boardRect = els.board.getBoundingClientRect();
       const scale = boardScale();
-      const pointerInBoard =
-        e.clientX >= boardRect.left && e.clientX <= boardRect.right &&
-        e.clientY >= boardRect.top && e.clientY <= boardRect.bottom;
+      const pointerInBoard = isOverBoard(e.clientX, e.clientY);
 
       if (pointerInBoard) {
-        const pieceLeftClient = e.clientX - grabDX;
-        const pieceTopClient = e.clientY - grabDY;
+        const pieceLeftClient = e.clientX - curGrabDX;
+        const pieceTopClient = e.clientY - curGrabDY;
         // Bildschirm- zu Bild-Koordinaten, unter Beruecksichtigung von Zoom/Pan des Boards
         const localX = (pieceLeftClient - boardRect.left - game.panX) / game.zoom;
         const localY = (pieceTopClient - boardRect.top - game.panY) / game.zoom;
@@ -425,8 +458,10 @@
 
         if (matches) {
           lockPiece(piece, scale);
-          return;
+        } else {
+          placeFreeOnBoard(piece, scale, imgX, imgY);
         }
+        return;
       }
       returnToTray(piece);
     }
@@ -436,11 +471,11 @@
 
   function lockPiece(piece, scale) {
     const canvas = piece.canvas;
-    const oldSlot = canvas.parentElement;
+    const oldParent = canvas.parentElement;
     piece.state = "locked";
     els.boardInner.appendChild(canvas);
-    if (oldSlot && oldSlot.classList.contains("tray-slot")) oldSlot.remove();
-    positionPieceOnBoard(piece, scale);
+    if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
+    renderPieceOnBoard(piece, scale, piece.boardX, piece.boardY);
     canvas.classList.add("locked");
     canvas.style.pointerEvents = "none";
     void canvas.offsetWidth; // reflow, damit die Animation neu startet
@@ -452,6 +487,20 @@
     if (game.locked >= game.total) {
       setTimeout(showWin, 450);
     }
+  }
+
+  // Teil frei im Spielfeld ablegen, auch wenn es (noch) nicht an der richtigen
+  // Stelle liegt. Bleibt beweglich und kann spaeter feinjustiert werden.
+  function placeFreeOnBoard(piece, scale, imgX, imgY) {
+    const canvas = piece.canvas;
+    const oldParent = canvas.parentElement;
+    piece.state = "free";
+    piece.freeX = imgX;
+    piece.freeY = imgY;
+    els.boardInner.appendChild(canvas);
+    if (oldParent && oldParent.classList.contains("tray-slot")) oldParent.remove();
+    renderPieceOnBoard(piece, scale, imgX, imgY);
+    canvas.classList.remove("dragging");
   }
 
   function returnToTray(piece) {
