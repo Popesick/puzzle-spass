@@ -17,11 +17,11 @@
 </head>
 <body>
 
-<!-- Galerie-Ansicht -->
+<!-- Kategorie-Ansicht (Startbildschirm) -->
 <section id="view-gallery" class="view view--active">
   <header class="app-header">
     <h1>🧩 Puzzle Spass</h1>
-    <p class="app-subtitle">Waehle ein Motiv aus</p>
+    <p class="app-subtitle">Waehle eine Kategorie</p>
   </header>
   <div id="ios-install-banner" class="ios-install-banner" hidden>
     <span class="ios-install-emoji" aria-hidden="true">📲</span>
@@ -36,6 +36,15 @@
     </p>
     <button id="ios-install-close" class="btn-icon ios-install-close" aria-label="Hinweis schliessen">✕</button>
   </div>
+  <div id="category-grid" class="gallery-grid"></div>
+</section>
+
+<!-- Motiv-Auswahl innerhalb einer Kategorie -->
+<section id="view-category" class="view">
+  <header class="app-header app-header--with-back">
+    <button class="btn-icon" id="category-back-btn" aria-label="Zurueck">←</button>
+    <h1 id="category-title">Kategorie</h1>
+  </header>
   <div id="gallery-grid" class="gallery-grid"></div>
 </section>
 

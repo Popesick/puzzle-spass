@@ -35,3 +35,16 @@ const PUZZLE_GALLERY = [
 ];
 
 const PIECE_COUNT_OPTIONS = [50, 100, 250, 500, 600];
+
+// Kategorien mit Anzeige-Reihenfolge und Symbol fuer die Ordner-Kacheln im
+// Startbildschirm. Neue Kategorie hinzufuegen: hier ergaenzen, dann Motive
+// mit passendem "category"-Wert in PUZZLE_GALLERY eintragen.
+const PUZZLE_CATEGORIES = [
+  { key: "Tiere", emoji: "🐾" },
+  { key: "Landschaft", emoji: "🏞️" },
+  { key: "Blumen", emoji: "🌸" },
+  { key: "Staedte bei Nacht", emoji: "🌃" },
+  { key: "Weltraum", emoji: "🌌" },
+  { key: "Unterwasserwelt", emoji: "🐠" },
+  { key: "Winter", emoji: "❄️" },
+];

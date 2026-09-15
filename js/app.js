@@ -3,8 +3,12 @@
 
 (() => {
   const els = {
-    galleryGrid: document.getElementById("gallery-grid"),
+    categoryGrid: document.getElementById("category-grid"),
     viewGallery: document.getElementById("view-gallery"),
+    viewCategory: document.getElementById("view-category"),
+    categoryBackBtn: document.getElementById("category-back-btn"),
+    categoryTitle: document.getElementById("category-title"),
+    galleryGrid: document.getElementById("gallery-grid"),
     viewSetup: document.getElementById("view-setup"),
     viewPuzzle: document.getElementById("view-puzzle"),
     setupBackBtn: document.getElementById("setup-back-btn"),
@@ -41,6 +45,7 @@
 
   let selectedImage = null;
   let selectedPieceCount = null;
+  let currentCategory = null;
   let game = null; // aktueller Puzzle-Zustand
   const MAX_ZOOM = 4;
 
@@ -149,27 +154,60 @@
   }
 
   function showView(view) {
-    [els.viewGallery, els.viewSetup, els.viewPuzzle].forEach(v => v.classList.remove("view--active"));
+    [els.viewGallery, els.viewCategory, els.viewSetup, els.viewPuzzle].forEach(v => v.classList.remove("view--active"));
     view.classList.add("view--active");
   }
 
-  // ---------- Galerie ----------
-  function renderGallery() {
+  // ---------- Kategorien (Startbildschirm) ----------
+  function renderCategories() {
+    els.categoryGrid.innerHTML = "";
+    PUZZLE_CATEGORIES.forEach(cat => {
+      const items = PUZZLE_GALLERY.filter((i) => i.category === cat.key);
+      if (items.length === 0) return;
+      const cover = items[0];
+      const card = document.createElement("button");
+      card.className = "category-card";
+      card.innerHTML = `
+        <img src="${cover.thumb}" alt="" loading="lazy" />
+        <div class="category-card-overlay">
+          <span class="category-card-emoji">${cat.emoji}</span>
+          <span class="category-card-title">${cat.key}</span>
+          <span class="category-card-count">${items.length} Motive</span>
+        </div>`;
+      card.addEventListener("click", () => openCategory(cat.key));
+      els.categoryGrid.appendChild(card);
+    });
+  }
+
+  // ---------- Motiv-Auswahl innerhalb einer Kategorie ----------
+  function openCategory(categoryKey) {
+    currentCategory = categoryKey;
+    const cat = PUZZLE_CATEGORIES.find((c) => c.key === categoryKey);
+    els.categoryTitle.textContent = cat ? `${cat.emoji} ${categoryKey}` : categoryKey;
+    renderCategoryImages(categoryKey);
+    showView(els.viewCategory);
+  }
+
+  function renderCategoryImages(categoryKey) {
     els.galleryGrid.innerHTML = "";
-    PUZZLE_GALLERY.forEach(item => {
+    PUZZLE_GALLERY.filter((i) => i.category === categoryKey).forEach(item => {
       const card = document.createElement("button");
       card.className = "gallery-card";
       card.innerHTML = `
         <img src="${item.thumb}" alt="${item.title}" loading="lazy" />
         <div class="gallery-card-info">
           <div class="gallery-card-title">${item.title}</div>
-          <span class="gallery-card-category">${item.category}</span>
         </div>`;
       card.addEventListener("click", () => openSetup(item));
       els.galleryGrid.appendChild(card);
       markSolvedThumb(card.querySelector("img"), item.id);
     });
   }
+
+  els.categoryBackBtn.addEventListener("click", () => {
+    renderCategories();
+    showView(els.viewGallery);
+  });
 
   function openSetup(item) {
     selectedImage = item;
@@ -203,13 +241,13 @@
   }
 
   els.setupBackBtn.addEventListener("click", () => {
-    renderGallery();
-    showView(els.viewGallery);
+    renderCategoryImages(currentCategory);
+    showView(els.viewCategory);
   });
   els.puzzleBackBtn.addEventListener("click", () => {
     teardownGame();
-    renderGallery();
-    showView(els.viewGallery);
+    renderCategoryImages(currentCategory);
+    showView(els.viewCategory);
   });
 
   els.startPuzzleBtn.addEventListener("click", () => {
@@ -900,12 +938,12 @@
   els.winGalleryBtn.addEventListener("click", () => {
     els.winOverlay.hidden = true;
     teardownGame();
-    renderGallery();
-    showView(els.viewGallery);
+    renderCategoryImages(currentCategory);
+    showView(els.viewCategory);
   });
 
   // ---------- Init ----------
-  renderGallery();
+  renderCategories();
   maybeShowIosInstallBanner();
 
   if ("serviceWorker" in navigator) {

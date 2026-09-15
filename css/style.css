@@ -156,15 +156,41 @@ img { -webkit-user-drag: none; user-select: none; }
 }
 .gallery-card-info { padding: 10px 12px 12px; }
 .gallery-card-title { font-weight: 600; font-size: 0.95rem; }
-.gallery-card-category {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 0.72rem;
-  color: var(--accent-2);
-  background: rgba(111, 214, 255, 0.12);
-  padding: 2px 8px;
-  border-radius: 20px;
+
+/* ---------- Kategorie-Kacheln (Startbildschirm) ---------- */
+.category-card {
+  position: relative;
+  background: var(--card);
+  border-radius: 14px;
+  overflow: hidden;
+  border: none;
+  padding: 0;
+  aspect-ratio: 16/9;
+  display: block;
 }
+.category-card:active { transform: scale(0.97); }
+.category-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.category-card-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(180deg, rgba(20,17,38,0.1) 0%, rgba(14,11,26,0.8) 100%);
+}
+.category-card-emoji { font-size: 1.7rem; line-height: 1.2; }
+.category-card-title { font-weight: 700; font-size: 1.02rem; }
+.category-card-count { font-size: 0.75rem; opacity: 0.85; }
 
 /* ---------- Setup / piece count ---------- */
 .setup-preview-wrap {
