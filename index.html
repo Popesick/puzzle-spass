@@ -58,6 +58,13 @@
     <img id="setup-preview-img" class="setup-preview-img" alt="" />
   </div>
   <div class="setup-piece-count">
+    <div id="setup-load-card" class="setup-load-card" hidden>
+      <div class="setup-load-info">
+        <p class="setup-load-title">💾 Gespeichertes Spiel gefunden</p>
+        <p id="setup-load-text" class="setup-load-text"></p>
+      </div>
+      <button id="setup-load-btn" class="btn-secondary setup-load-btn">Laden</button>
+    </div>
     <div id="setup-trophies" class="win-trophies" hidden>
       <p class="setup-trophies-label">Deine Bestzeiten fuer dieses Motiv</p>
     </div>
@@ -71,6 +78,7 @@
 <section id="view-puzzle" class="view">
   <header class="puzzle-header">
     <button class="btn-icon" id="puzzle-back-btn" aria-label="Zurueck">←</button>
+    <button class="btn-icon" id="puzzle-save-btn" aria-label="Speichern und schliessen" title="Speichern und schliessen">💾</button>
     <div class="puzzle-header-info">
       <span id="puzzle-title" class="puzzle-title"></span>
       <span class="puzzle-progress-row">
@@ -121,6 +129,19 @@
     <div class="win-actions">
       <button id="win-replay-btn" class="btn-secondary">Nochmal</button>
       <button id="win-gallery-btn" class="btn-primary">Neues Motiv</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bestaetigungs-Dialog (z.B. Speicherplatz voll) -->
+<div id="confirm-overlay" class="win-overlay" hidden>
+  <div class="win-card">
+    <div class="win-emoji">⚠️</div>
+    <h2>Speicherplatz voll</h2>
+    <p id="confirm-text"></p>
+    <div class="win-actions">
+      <button id="confirm-cancel-btn" class="btn-secondary">Abbrechen</button>
+      <button id="confirm-ok-btn" class="btn-primary">Ueberschreiben</button>
     </div>
   </div>
 </div>

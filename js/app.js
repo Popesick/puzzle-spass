@@ -18,6 +18,10 @@
     setupTrophies: document.getElementById("setup-trophies"),
     startPuzzleBtn: document.getElementById("start-puzzle-btn"),
     puzzleBackBtn: document.getElementById("puzzle-back-btn"),
+    puzzleSaveBtn: document.getElementById("puzzle-save-btn"),
+    setupLoadCard: document.getElementById("setup-load-card"),
+    setupLoadText: document.getElementById("setup-load-text"),
+    setupLoadBtn: document.getElementById("setup-load-btn"),
     puzzleTitle: document.getElementById("puzzle-title"),
     puzzleProgress: document.getElementById("puzzle-progress"),
     puzzleTimer: document.getElementById("puzzle-timer"),
@@ -41,6 +45,10 @@
     dragLayer: document.getElementById("drag-layer"),
     iosInstallBanner: document.getElementById("ios-install-banner"),
     iosInstallClose: document.getElementById("ios-install-close"),
+    confirmOverlay: document.getElementById("confirm-overlay"),
+    confirmText: document.getElementById("confirm-text"),
+    confirmOkBtn: document.getElementById("confirm-ok-btn"),
+    confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
   };
 
   let selectedImage = null;
@@ -116,6 +124,121 @@
         </div>`;
       })
       .join("");
+  }
+
+  // ---------- Eigener Bestaetigungs-Dialog ----------
+  // Statt window.confirm(), das die Seite blockiert und in manchen mobilen/
+  // installierten PWA-Kontexten (z.B. iOS Standalone-Modus) unzuverlaessig
+  // oder gar nicht angezeigt wird, ein eigenes, zum Look der App passendes
+  // Overlay. Gibt ein Promise<boolean> zurueck (true = bestaetigt).
+  function showConfirmDialog(message) {
+    return new Promise((resolve) => {
+      els.confirmText.textContent = message;
+      els.confirmOverlay.hidden = false;
+      function cleanup(result) {
+        els.confirmOverlay.hidden = true;
+        els.confirmOkBtn.removeEventListener("click", onOk);
+        els.confirmCancelBtn.removeEventListener("click", onCancel);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      els.confirmOkBtn.addEventListener("click", onOk);
+      els.confirmCancelBtn.addEventListener("click", onCancel);
+    });
+  }
+
+  // ---------- Spielstaende (Speichern & Laden) ----------
+  // Bis zu drei laufende Spiele koennen zwischengespeichert werden (Motiv,
+  // Teilezahl, Zeit sowie Position/Zustand jedes Puzzleteils). Ein Spiel pro
+  // Motiv - wird dasselbe Motiv erneut gespeichert, ersetzt es den alten Stand.
+  const SAVED_GAMES_KEY = "puzzleSpassSavedGames";
+  const MAX_SAVED_GAMES = 3;
+
+  function loadSavedGames() {
+    try {
+      return JSON.parse(localStorage.getItem(SAVED_GAMES_KEY)) || [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function writeSavedGames(games) {
+    try {
+      localStorage.setItem(SAVED_GAMES_KEY, JSON.stringify(games));
+    } catch (err) {
+      // z.B. Privatmodus ohne Storage-Zugriff - Spielstand dann einfach nicht speichern
+    }
+  }
+
+  function removeSavedGame(saveId) {
+    writeSavedGames(loadSavedGames().filter((g) => g.id !== saveId));
+  }
+
+  function buildSaveObject() {
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      imageId: game.item.id,
+      pieceCount: selectedPieceCount,
+      savedAt: Date.now(),
+      elapsedMs: Date.now() - game.startTime,
+      pieces: game.pieces.map((p) => ({
+        id: p.id, groupId: p.groupId, curX: p.curX, curY: p.curY, state: p.state,
+      })),
+    };
+  }
+
+  // Speichert den aktuellen Spielstand. Gibt es bereits einen Stand fuer
+  // dasselbe Motiv, wird dieser ersetzt. Andernfalls zaehlt es als neuer
+  // Stand - sind schon drei belegt, muss der Nutzer das Ueberschreiben des
+  // aeltesten Standes bestaetigen. Gibt zurueck, ob gespeichert wurde.
+  async function saveCurrentGame() {
+    if (!game) return true;
+    const saveObj = buildSaveObject();
+    const games = loadSavedGames();
+    const existingIdx = games.findIndex((g) => g.imageId === saveObj.imageId);
+    if (existingIdx !== -1) {
+      games[existingIdx] = saveObj;
+      writeSavedGames(games);
+      return true;
+    }
+    if (games.length >= MAX_SAVED_GAMES) {
+      const confirmed = await showConfirmDialog(
+        "Achtung: nur drei Spielstaende moeglich. Soll ich ein altes Spiel ueberschreiben?"
+      );
+      if (!confirmed) return false;
+      games.sort((a, b) => a.savedAt - b.savedAt);
+      games.shift();
+    }
+    games.push(saveObj);
+    writeSavedGames(games);
+    return true;
+  }
+
+  // Ueberschreibt die frisch aufgebauten Teile mit dem gespeicherten Zustand
+  // (Gruppen/Position/ob gelegt oder eingerastet). Teile, die im Stand noch
+  // in der Reihe lagen, bleiben einfach an ihrer (neu ausgewuerfelten) Stelle.
+  function restoreSavedState(savedState) {
+    const byId = new Map(savedState.pieces.map((p) => [p.id, p]));
+    game.pieces.forEach((piece) => {
+      const saved = byId.get(piece.id);
+      if (!saved || saved.state === "tray") return;
+      const slot = piece.canvas.parentElement;
+      if (slot && slot.classList.contains("tray-slot")) slot.remove();
+      piece.groupId = saved.groupId;
+      piece.curX = saved.curX;
+      piece.curY = saved.curY;
+      piece.state = saved.state;
+      renderPieceOnBoard(piece, piece.curX, piece.curY);
+      if (saved.state === "locked") {
+        piece.canvas.classList.add("locked");
+        piece.canvas.style.pointerEvents = "none";
+      }
+      els.boardInner.appendChild(piece.canvas);
+    });
+    game.locked = game.pieces.filter((p) => p.state === "locked").length;
+    updateProgress();
+    updateTrayEdgeFilter();
   }
 
   // ---------- iOS-Installationshinweis ----------
@@ -223,6 +346,15 @@
     els.setupTrophies.insertAdjacentHTML("beforeend", rows);
     els.setupTrophies.hidden = rows.length === 0;
 
+    const savedGame = loadSavedGames().find((g) => g.imageId === item.id);
+    if (savedGame) {
+      els.setupLoadText.textContent = `${savedGame.pieceCount} Teile, gespeichert bei ${formatTime(savedGame.elapsedMs)}`;
+      els.setupLoadBtn.onclick = () => loadSavedGame(savedGame);
+      els.setupLoadCard.hidden = false;
+    } else {
+      els.setupLoadCard.hidden = true;
+    }
+
     els.pieceCountOptions.innerHTML = "";
     PIECE_COUNT_OPTIONS.forEach(count => {
       const btn = document.createElement("button");
@@ -250,14 +382,26 @@
     showView(els.viewCategory);
   });
 
+  // Speichert den laufenden Spielstand und kehrt (anders als der einfache
+  // Zurueck-Button, der nur zur zuletzt geoeffneten Kategorie zurueckgeht)
+  // direkt zum Hauptmenue (Kategorie-Uebersicht) zurueck.
+  els.puzzleSaveBtn.addEventListener("click", async () => {
+    if (!game) return;
+    const saved = await saveCurrentGame();
+    if (!saved) return;
+    teardownGame();
+    renderCategories();
+    showView(els.viewGallery);
+  });
+
   els.startPuzzleBtn.addEventListener("click", () => {
     if (!selectedImage || !selectedPieceCount) return;
     startPuzzle(selectedImage, selectedPieceCount);
   });
 
   // ---------- Puzzle-Start ----------
-  function startPuzzle(item, pieceCount) {
-    els.loadingText.textContent = "Puzzle wird vorbereitet...";
+  function startPuzzle(item, pieceCount, savedState) {
+    els.loadingText.textContent = savedState ? "Spielstand wird geladen..." : "Puzzle wird vorbereitet...";
     els.loadingOverlay.hidden = false;
 
     const img = new Image();
@@ -269,7 +413,7 @@
         // damit board-wrap beim Bauen bereits eine echte Groesse hat -
         // sonst liefert computeBaseFit() wegen display:none 0x0.
         showView(els.viewPuzzle);
-        buildGame(item, img, pieceCount);
+        buildGame(item, img, pieceCount, savedState);
         els.loadingOverlay.hidden = true;
       }, 30);
     };
@@ -278,6 +422,17 @@
       alert("Bild konnte nicht geladen werden.");
     };
     img.src = item.full;
+  }
+
+  // Laedt einen gespeicherten Spielstand: Speicher wird sofort verbraucht
+  // (geloescht), damit derselbe Stand nicht mehrfach geladen werden kann.
+  function loadSavedGame(savedState) {
+    const item = PUZZLE_GALLERY.find((i) => i.id === savedState.imageId);
+    if (!item) return;
+    removeSavedGame(savedState.id);
+    selectedImage = item;
+    selectedPieceCount = savedState.pieceCount;
+    startPuzzle(item, savedState.pieceCount, savedState);
   }
 
   const boardResizeObserver = new ResizeObserver(() => {
@@ -331,8 +486,8 @@
   }
 
   // ---------- Timer ----------
-  function startTimer() {
-    game.startTime = Date.now();
+  function startTimer(elapsedMs) {
+    game.startTime = Date.now() - (elapsedMs || 0);
     updateTimerDisplay();
     game.timerInterval = setInterval(updateTimerDisplay, 1000);
   }
@@ -361,7 +516,7 @@
     if (els.edgesBtn) els.edgesBtn.classList.remove("active");
   }
 
-  function buildGame(item, img, pieceCount) {
+  function buildGame(item, img, pieceCount, savedState) {
     teardownGame();
 
     const aspect = img.naturalWidth / img.naturalHeight;
@@ -399,7 +554,6 @@
     centerOrClampPan();
     applyBoardTransform();
     els.zoomResetBtn.hidden = true;
-    startTimer();
 
     updateProgress();
 
@@ -416,6 +570,9 @@
     updateTrayEdgeFilter();
 
     boardResizeObserver.observe(els.boardWrap);
+
+    if (savedState) restoreSavedState(savedState);
+    startTimer(savedState ? savedState.elapsedMs : 0);
   }
 
   // ---------- Randstuecke-Filter ----------
