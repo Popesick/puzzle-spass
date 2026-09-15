@@ -18,6 +18,7 @@
     puzzleProgress: document.getElementById("puzzle-progress"),
     puzzleTimer: document.getElementById("puzzle-timer"),
     puzzlePreviewBtn: document.getElementById("puzzle-preview-btn"),
+    edgesBtn: document.getElementById("puzzle-edges-btn"),
     zoomResetBtn: document.getElementById("puzzle-zoom-reset-btn"),
     boardWrap: document.getElementById("board-wrap"),
     board: document.getElementById("board"),
@@ -34,6 +35,8 @@
     winReplayBtn: document.getElementById("win-replay-btn"),
     winGalleryBtn: document.getElementById("win-gallery-btn"),
     dragLayer: document.getElementById("drag-layer"),
+    iosInstallBanner: document.getElementById("ios-install-banner"),
+    iosInstallClose: document.getElementById("ios-install-close"),
   };
 
   let selectedImage = null;
@@ -108,6 +111,41 @@
         </div>`;
       })
       .join("");
+  }
+
+  // ---------- iOS-Installationshinweis ----------
+  // iOS/iPadOS bieten (anders als Android/Desktop-Chrome) kein automatisches
+  // Installations-Prompt (beforeinstallprompt) an - der Nutzer muss manuell
+  // ueber Safaris Teilen-Menue "Zum Home-Bildschirm" waehlen. Wir zeigen dafuer
+  // eine kurze, dismissible Anleitung, solange die App noch nicht installiert ist.
+  const IOS_BANNER_DISMISSED_KEY = "puzzleSpassIosBannerDismissed";
+
+  function isIosDevice() {
+    const ua = navigator.userAgent || "";
+    if (/iphone|ipad|ipod/i.test(ua)) return true;
+    // iPadOS 13+ meldet sich als "MacIntel", ist aber via Touch-Support erkennbar
+    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  }
+
+  function isRunningStandalone() {
+    return window.navigator.standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+  }
+
+  function maybeShowIosInstallBanner() {
+    if (!els.iosInstallBanner) return;
+    if (!isIosDevice() || isRunningStandalone()) return;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(IOS_BANNER_DISMISSED_KEY) === "1"; } catch (err) {}
+    if (dismissed) return;
+    els.iosInstallBanner.hidden = false;
+  }
+
+  if (els.iosInstallClose) {
+    els.iosInstallClose.addEventListener("click", () => {
+      els.iosInstallBanner.hidden = true;
+      try { localStorage.setItem(IOS_BANNER_DISMISSED_KEY, "1"); } catch (err) {}
+    });
   }
 
   function showView(view) {
@@ -282,6 +320,7 @@
     [...els.board.querySelectorAll(".piece-canvas")].forEach(el => el.remove());
     game = null;
     els.zoomResetBtn.hidden = true;
+    if (els.edgesBtn) els.edgesBtn.classList.remove("active");
   }
 
   function buildGame(item, img, pieceCount) {
@@ -308,9 +347,11 @@
       item, pieces, pieceByRowCol,
       imgW: built.imgW, imgH: built.imgH,
       cellW: built.cellW, cellH: built.cellH,
+      rows, cols,
       total: pieces.length,
       locked: 0,
       guideVisible: false,
+      edgesOnly: false,
       zoom: 1, panX: 0, panY: 0,
       baseScale: 1, outerW: 0, outerH: 0,
     };
@@ -334,8 +375,37 @@
       els.tray.appendChild(slot);
       attachDragHandlers(piece);
     });
+    updateTrayEdgeFilter();
 
     boardResizeObserver.observe(els.boardWrap);
+  }
+
+  // ---------- Randstuecke-Filter ----------
+  function isEdgePiece(piece) {
+    return piece.row === 0 || piece.row === game.rows - 1 ||
+      piece.col === 0 || piece.col === game.cols - 1;
+  }
+
+  // Blendet in der Reihe alle Teile aus, die keine Randstuecke sind, solange
+  // der Filter aktiv ist. Wird nach jeder Aenderung der Reihe erneut aufgerufen
+  // (Aufbau, Zurueckgeben eines Teils), da sich die Reihe dynamisch aendert.
+  function updateTrayEdgeFilter() {
+    if (!game) return;
+    game.pieces.forEach((p) => {
+      if (p.state !== "tray") return;
+      const slot = p.canvas.parentElement;
+      if (!slot) return;
+      slot.hidden = game.edgesOnly && !isEdgePiece(p);
+    });
+  }
+
+  if (els.edgesBtn) {
+    els.edgesBtn.addEventListener("click", () => {
+      if (!game) return;
+      game.edgesOnly = !game.edgesOnly;
+      els.edgesBtn.classList.toggle("active", game.edgesOnly);
+      updateTrayEdgeFilter();
+    });
   }
 
   function updateProgress() {
@@ -703,7 +773,10 @@
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         if (Math.hypot(dx, dy) < 6) return;
-        const verticalDominant = Math.abs(dy) >= Math.abs(dx);
+        // Grosszuegige Schwelle: schon ab ~27 Grad aus der Horizontalen wird als
+        // Herausziehen gewertet, nicht erst bei einer exakt senkrechten Geste -
+        // sonst fuehlt sich das Greifen aus der Reihe zu streng/genau an.
+        const verticalDominant = Math.abs(dy) >= Math.abs(dx) * 0.5;
         if (source === "board" || verticalDominant) {
           e.preventDefault();
           beginDrag(e);
@@ -794,6 +867,7 @@
     slot.className = "tray-slot";
     slot.appendChild(canvas);
     els.tray.appendChild(slot);
+    updateTrayEdgeFilter();
   }
 
   // ---------- Vorschau-Taste ----------
@@ -832,6 +906,7 @@
 
   // ---------- Init ----------
   renderGallery();
+  maybeShowIosInstallBanner();
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
